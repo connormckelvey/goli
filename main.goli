@@ -1,0 +1,9 @@
+(package main) ; the package
+
+(import [log "github.com/sirupsen/logrus"]
+        ["fmt"])
+; this is a comment
+(defn -main [] 
+  (log/Info "foo") ; this is also a comment
+  (log/Info "bar") ; this is also a comment
+  (fmt/Println "bar")) ; this is the last comment 
