@@ -33,27 +33,60 @@ func parse(program []byte) []byte {
 	return []byte{}
 }
 
+type Symbol struct {
+	Value interface{}
+	Kind  string
+}
+
+var keywords = map[string]bool{
+	"package": true,
+	"import":  true,
+}
+
+func newSymbol(value interface{}) *Symbol {
+	if in := keywords[value.(string)]; in {
+		return &Symbol{
+			Value: value,
+			Kind:  "keyword",
+		}
+	}
+	return nil
+}
+
+type Node struct {
+	Children []interface{}
+	parent   *Node
+}
+
 func buildAST(tokens []string) interface{} {
-	ast := []interface{}{}
-	parent := &ast
-	cur := &ast
+	ast := &Node{}
+	var parent *Node = nil
+	cur := ast
 
 	for _, token := range tokens {
 		if strings.TrimSpace(token) == "" {
 			continue
 		}
 
+		if token == "defn" {
+			fmt.Printf("Token: %#v\n", token)
+			fmt.Printf("%#v\n", cur)
+			fmt.Printf("%#v\n", parent)
+		}
 		if token == "(" {
-			node := []interface{}{}
-			*cur = append(*cur, &node)
+			node := &Node{
+				parent: cur,
+			}
+			cur.Children = append(cur.Children, node)
 			parent = cur
-			cur = &node
+			cur = node
 			continue
 		} else if token == ")" {
-			cur = parent
+			// once nested, and closing 2, ie )), parent points to the same place, probably need parent pointer fields on struct
+			cur = cur.parent
 			continue
 		}
-		*cur = append(*cur, token)
+		cur.Children = append(cur.Children, token)
 
 	}
 	return ast
