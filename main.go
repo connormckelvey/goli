@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"regexp"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -18,8 +20,53 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	result := prepare(program)
+	result := parse(program)
 	fmt.Println(string(result))
+}
+
+func parse(program []byte) []byte {
+	program = prepare(program)
+	tokens := tokenize(program)
+	ast := buildAST(tokens)
+	j, _ := json.MarshalIndent(ast, "", "\t")
+	fmt.Println(string(j))
+	return []byte{}
+}
+
+func buildAST(tokens []string) interface{} {
+	ast := []interface{}{}
+	parent := &ast
+	cur := &ast
+
+	for _, token := range tokens {
+		if strings.TrimSpace(token) == "" {
+			continue
+		}
+
+		if token == "(" {
+			node := []interface{}{}
+			*cur = append(*cur, &node)
+			parent = cur
+			cur = &node
+			continue
+		} else if token == ")" {
+			cur = parent
+			continue
+		}
+		*cur = append(*cur, token)
+
+	}
+	return ast
+}
+
+func tokenize(program []byte) []string {
+	input := string(program)
+	input = strings.ReplaceAll(input, "(", " ( ")
+	input = strings.ReplaceAll(input, ")", " ) ")
+	input = strings.TrimSpace(input)
+	tokens := strings.Split(input, " ")
+
+	return tokens
 }
 
 func prepare(input []byte) []byte {
