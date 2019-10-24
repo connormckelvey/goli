@@ -30,62 +30,87 @@ func parse(program []byte) []byte {
 	ast := buildAST(tokens)
 	j, _ := json.MarshalIndent(ast, "", "\t")
 	fmt.Println(string(j))
-	generate(ast)
+	fmt.Println(generate(ast))
 	return []byte{}
 }
 
-type generator func(args ...interface{}) string
+type gen func(args ...interface{}) string
 
-var generators = map[string]generator{
-	"package": func(args ...interface{}) string {
-		if len(args) > 1 {
-			panic("too many args")
-		}
-		return fmt.Sprintf("package %s", args[0].(string))
-	},
-	"import": func(args ...interface{}) string {
-		template := `
-import (
-	%s
-)`
+var generators map[string]gen
 
-		imports := []string{}
-		for _, node := range args {
-			n := node.(*Node)
-			line := []string{}
-			for _, c := range n.Children {
-				line = append(line, c.(string))
+func init() {
+	generators = map[string]gen{
+		"package": func(args ...interface{}) string {
+			if len(args) > 1 {
+				panic("too many args")
 			}
-			imports = append(imports, strings.Join(line, " "))
+			return fmt.Sprintf("package %s", args[0].(string))
+		},
+		"import": func(args ...interface{}) string {
+			template := `
+	import (
+		%s
+	)`
 
-		}
-		return strings.TrimSpace(fmt.Sprintf(template, strings.Join(imports, "\n\t")))
-	},
-	"defn": func(args ...interface{}) string {
+			imports := []string{}
+			for _, node := range args {
+				n := node.(*Node)
+				line := []string{}
+				for _, c := range n.Children {
+					line = append(line, c.(string))
+				}
+				imports = append(imports, strings.Join(line, " "))
 
-		nameReturn := args[0].(string)
-		params := args[1]
-		nameReturnParts := strings.Split(nameReturn, ":")
-		name := nameReturnParts[0]
-		returnType := ""
-		if len(nameReturnParts) == 2 {
-			returnType = nameReturnParts[1]
-		}
-		paramsStr := parseDefnParams(params.(*Node).Children)
+			}
+			return strings.TrimSpace(fmt.Sprintf(template, strings.Join(imports, "\n\t")))
+		},
+		"defn": func(args ...interface{}) string {
 
-		output := fmt.Sprintf("\nfunc %s(%s) %s {", name, paramsStr, returnType)
-		json, _ := json.Marshal(args[2:])
-		output += "\n" + string(json)
-		output += "\n}"
+			nameReturn := args[0].(string)
+			params := args[1]
+			nameReturnParts := strings.Split(nameReturn, ":")
+			name := nameReturnParts[0]
+			returnType := ""
+			if len(nameReturnParts) == 2 {
+				returnType = nameReturnParts[1]
+			}
+			if returnType != "" {
+				returnType = " " + returnType
+			}
+			paramsStr := parseDefnParams(params.(*Node).Children)
 
-		return output
-	},
+			output := fmt.Sprintf("\nfunc %s(%s)%s {", name, paramsStr, returnType)
+
+			n := &Node{
+				Children: args[2:],
+			}
+			output += generate(n)
+			output += "\n}"
+
+			return output
+		},
+		"default": func(args ...interface{}) string {
+			call := args[0].(string)
+			callParts := strings.Split(call, "/")
+			goCall := strings.Join(callParts, ".")
+			goCallArgs := []string{}
+
+			for _, a := range args[1:] {
+				goCallArgs = append(goCallArgs, a.(string))
+			}
+			goCallArgsStr := strings.Join(goCallArgs, ", ")
+			output := "\n" + goCall + "(" + goCallArgsStr + ")"
+			return output
+		},
+	}
 }
 
-func generate(tree *Node) {
+func generate(tree *Node) string {
 	children := tree.Children
 	var i int
 	var child interface{}
+
+	output := ""
 
 	for i < len(children) {
 		child = children[i]
@@ -96,18 +121,26 @@ func generate(tree *Node) {
 		}
 		switch v := child.(type) {
 		case string:
+			args := children[1:]
 			if generator, ok := generators[v]; ok {
-				args := children[1:]
-				fmt.Println(generator(args...))
+				result := generator(args...)
+				output = fmt.Sprintf("%s\n%s", output, result)
+			} else {
+				newargs := []interface{}{v}
+				newargs = append(newargs, args...)
+				result := generators["default"](newargs...)
+				output = fmt.Sprintf("%s\n%s", output, result)
 			}
+
 			i += len(children)
 			continue
 		case *Node:
-			generate(v)
+			output = fmt.Sprintf("%s\n%s", output, generate(v))
 			i++
 			continue
 		}
 	}
+	return output
 }
 
 type Node struct {
