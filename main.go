@@ -30,35 +30,103 @@ func parse(program []byte) []byte {
 	ast := buildAST(tokens)
 	j, _ := json.MarshalIndent(ast, "", "\t")
 	fmt.Println(string(j))
+	generate(ast)
 	return []byte{}
 }
 
-type Symbol struct {
-	Value interface{}
-	Kind  string
+type generator func(args ...interface{}) string
+
+var generators = map[string]generator{
+	"package": func(args ...interface{}) string {
+		if len(args) > 1 {
+			panic("too many args")
+		}
+		return fmt.Sprintf("package %s", args[0].(string))
+	},
+	"import": func(args ...interface{}) string {
+		template := `
+import (
+	%s
+)`
+
+		imports := []string{}
+		for _, node := range args {
+			n := node.(*Node)
+			line := []string{}
+			for _, c := range n.Children {
+				line = append(line, c.(string))
+			}
+			imports = append(imports, strings.Join(line, " "))
+
+		}
+		return strings.TrimSpace(fmt.Sprintf(template, strings.Join(imports, "\n\t")))
+	},
+	"defn": func(args ...interface{}) string {
+
+		nameReturn := args[0].(string)
+		params := args[1]
+		nameReturnParts := strings.Split(nameReturn, ":")
+		name := nameReturnParts[0]
+		returnType := ""
+		if len(nameReturnParts) == 2 {
+			returnType = nameReturnParts[1]
+		}
+		paramsStr := parseDefnParams(params.(*Node).Children)
+
+		output := fmt.Sprintf("\nfunc %s(%s) %s {", name, paramsStr, returnType)
+		json, _ := json.Marshal(args[2:])
+		output += "\n" + string(json)
+		output += "\n}"
+
+		return output
+	},
 }
 
-var keywords = map[string]bool{
-	"package": true,
-	"import":  true,
-}
+func generate(tree *Node) {
+	children := tree.Children
+	var i int
+	var child interface{}
 
-func newSymbol(value interface{}) *Symbol {
-	if in := keywords[value.(string)]; in {
-		return &Symbol{
-			Value: value,
-			Kind:  "keyword",
+	for i < len(children) {
+		child = children[i]
+		if child == nil {
+			fmt.Println("nil")
+			i++
+			continue
+		}
+		switch v := child.(type) {
+		case string:
+			if generator, ok := generators[v]; ok {
+				args := children[1:]
+				fmt.Println(generator(args...))
+			}
+			i += len(children)
+			continue
+		case *Node:
+			generate(v)
+			i++
+			continue
 		}
 	}
-	return nil
 }
 
 type Node struct {
+	// Value    string
 	Children []interface{}
 	parent   *Node
 }
 
-func buildAST(tokens []string) interface{} {
+func parseDefnParams(params []interface{}) string {
+	paramsSlice := []string{}
+	for _, param := range params {
+		p := param.(string)
+		pParts := strings.Split(p, ":")
+		paramsSlice = append(paramsSlice, pParts[0]+" "+pParts[1])
+	}
+	return strings.Join(paramsSlice, ", ")
+}
+
+func buildAST(tokens []string) *Node {
 	ast := &Node{}
 	var parent *Node = nil
 	cur := ast
@@ -85,8 +153,9 @@ func buildAST(tokens []string) interface{} {
 			// once nested, and closing 2, ie )), parent points to the same place, probably need parent pointer fields on struct
 			cur = cur.parent
 			continue
+		} else {
+			cur.Children = append(cur.Children, token)
 		}
-		cur.Children = append(cur.Children, token)
 
 	}
 	return ast
