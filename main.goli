@@ -4,10 +4,10 @@
         ("fmt"))
 ; this is a comment
 (defn main ()
-  (log/Info "foo") ; this is also a comment
+  (log/Info (+ "foo" "bar" (+ "bar" "baz" (+ "baz" "qux")))) ; this is also a comment
   (log/Info "foo") ; this is also a comment
   (log/Info "bar") ; this is also a comment
   (fmt/Println "bar")) ; this is the last comment 
 
-(defn foo:int (x:int y:int)
- (+ x y))
+;(defn foo:int (x:int y:int)
+; (- y (* x (+ x y)) 10))

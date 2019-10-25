@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -28,8 +27,8 @@ func parse(program []byte) []byte {
 	program = prepare(program)
 	tokens := tokenize(program)
 	ast := buildAST(tokens)
-	j, _ := json.MarshalIndent(ast, "", "\t")
-	fmt.Println(string(j))
+	// j, _ := json.MarshalIndent(ast, "", "\t")
+	// fmt.Println(string(j))
 	fmt.Println(generate(ast))
 	return []byte{}
 }
@@ -89,6 +88,18 @@ func init() {
 
 			return output
 		},
+		"+": func(args ...interface{}) string {
+			sums := []string{}
+			for _, a := range args {
+				switch v := a.(type) {
+				case string:
+					sums = append(sums, v)
+				case *Node:
+					sums = append(sums, generate(v))
+				}
+			}
+			return strings.Join(sums, "+")
+		},
 		"default": func(args ...interface{}) string {
 			call := args[0].(string)
 			callParts := strings.Split(call, "/")
@@ -96,7 +107,12 @@ func init() {
 			goCallArgs := []string{}
 
 			for _, a := range args[1:] {
-				goCallArgs = append(goCallArgs, a.(string))
+				switch v := a.(type) {
+				case string:
+					goCallArgs = append(goCallArgs, v)
+				case *Node:
+					goCallArgs = append(goCallArgs, generate(v))
+				}
 			}
 			goCallArgsStr := strings.Join(goCallArgs, ", ")
 			output := "\n" + goCall + "(" + goCallArgsStr + ")"
@@ -161,7 +177,6 @@ func parseDefnParams(params []interface{}) string {
 
 func buildAST(tokens []string) *Node {
 	ast := &Node{}
-	var parent *Node = nil
 	cur := ast
 
 	for _, token := range tokens {
@@ -169,17 +184,11 @@ func buildAST(tokens []string) *Node {
 			continue
 		}
 
-		if token == "defn" {
-			fmt.Printf("Token: %#v\n", token)
-			fmt.Printf("%#v\n", cur)
-			fmt.Printf("%#v\n", parent)
-		}
 		if token == "(" {
 			node := &Node{
 				parent: cur,
 			}
 			cur.Children = append(cur.Children, node)
-			parent = cur
 			cur = node
 			continue
 		} else if token == ")" {
